@@ -1,0 +1,43 @@
+# ── Personal financial data ───────────────────────────────────────────────────
+# Bank statement PDFs — never commit real statements
+statements/*.pdf
+
+# Extracted transaction data
+output/individual/*
+!output/individual/.gitkeep
+output/cumulative.csv
+
+# Pipeline state — contains file hashes tied to your personal statements
+pipeline.json
+
+# ── Python ────────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# ── Virtual environments ──────────────────────────────────────────────────────
+.venv/
+venv/
+env/
+ENV/
+
+# ── OS ────────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ── IDE ───────────────────────────────────────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Streamlit ─────────────────────────────────────────────────────────────────
+.streamlit/secrets.toml
