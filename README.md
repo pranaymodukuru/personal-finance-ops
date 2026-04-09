@@ -43,7 +43,7 @@ Claude Code acts as the AI brain: it reads the raw PDF, understands the bank's l
 git clone https://github.com/pranaymodukuru/personal-finance-ops
 cd personal-finance-ops
 
-pip install pdfplumber streamlit plotly pandas numpy
+pip install -e .
 ```
 
 That's it. No API keys required — Claude Code is the runtime.
