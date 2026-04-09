@@ -97,6 +97,7 @@ Opens at **http://localhost:8501**
 | `/pipeline-status` | Show processed files, transaction counts, and what's pending |
 | `/reprocess [file]` | Force re-extract a specific statement even if already processed |
 | `/start-dashboard` | Start the Streamlit dashboard |
+| `/reset` | Delete all statements, extracted data, and pipeline state (asks for confirmation first) |
 
 ---
 
