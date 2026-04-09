@@ -80,8 +80,8 @@ def status() -> list[dict]:
 
 
 def pending(statements_dir: Path = Path("statements")) -> list[Path]:
-    """Return PDFs in statements_dir that have not yet been processed."""
-    pdfs = sorted(statements_dir.glob("*.pdf"))
+    """Return PDFs in statements_dir (any depth) that have not yet been processed."""
+    pdfs = sorted(statements_dir.rglob("*.pdf"))
     return [p for p in pdfs if not is_processed(p)]
 
 

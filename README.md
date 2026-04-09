@@ -58,9 +58,12 @@ Drop any supported bank statement PDF into `statements/`:
 
 ```
 statements/
-  ├── n26-october-2024.pdf
-  ├── amex-november-2024.pdf
-  └── advanzia-december-2024.pdf
+  ├── N26/
+  │   └── n26-october-2024.pdf
+  ├── Amex/
+  │   └── amex-november-2024.pdf
+  └── Advanzia/
+      └── advanzia-december-2024.pdf
 ```
 
 ### 2. Process them
@@ -144,7 +147,10 @@ Every transaction is normalised to 16 fields:
 
 ```
 personal-finance-ops/
-├── statements/              # Drop PDF bank statements here (git-ignored)
+├── statements/              # Drop PDF bank statements here, organised by bank (git-ignored)
+│   ├── N26/
+│   ├── Amex/
+│   └── Advanzia/
 ├── output/
 │   ├── individual/          # Per-statement CSV + JSON (git-ignored)
 │   └── cumulative.csv       # All transactions combined (git-ignored)

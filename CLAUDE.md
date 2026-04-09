@@ -6,7 +6,10 @@ Claude Code is the AI brain of this project. Drop a bank statement PDF into `sta
 
 ```
 pf-ops/
-├── statements/              # Drop PDF bank statements here
+├── statements/              # Drop PDF bank statements here (organised by bank subfolder)
+│   ├── N26/
+│   ├── Amex/
+│   └── Advanzia/
 ├── output/
 │   ├── individual/          # Per-statement CSV + JSON files
 │   └── cumulative.csv       # All transactions combined across all statements
