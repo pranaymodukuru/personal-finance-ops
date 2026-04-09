@@ -1,6 +1,8 @@
 # ── Personal financial data ───────────────────────────────────────────────────
 # Bank statement PDFs — never commit real statements
+*.pdf
 statements/*.pdf
+statements/**/*.pdf
 
 # Extracted transaction data
 output/individual/*
