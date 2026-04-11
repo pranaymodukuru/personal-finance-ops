@@ -3,13 +3,21 @@ name: pipeline-status
 description: Show which bank statement PDFs have been processed, transaction counts, and what is still pending
 ---
 
-Show the current state of the processing pipeline.
+Show the current state of the processing pipeline and sync pipeline.json with the filesystem.
 
 Steps:
-1. Run `python -m src.pipeline` to display all processed statements.
-2. Run `python -c "from src.pipeline import pending; files = list(pending()); print(f'{len(files)} pending'); [print(' -', p) for p in files]"` to list any unprocessed PDFs waiting in statements/.
-3. Present a clean summary:
-   - How many statements have been processed total
-   - Total transactions extracted across all statements
-   - Which files are pending (if any), prompting the user to run /process-statements if there are pending files
-   - For each processed file: filename, transaction count, date processed, and output file paths
+1. Run `python -m src.pipeline sync` — this scans all PDFs under `statements/`, adds any newly discovered files as "pending", removes stale pending entries, and saves the full state to `pipeline.json`.
+2. Run `python -m src.pipeline` (without `sync`) to display the current pipeline table.
+3. Present a clean summary with two sections:
+
+**Processed**
+- Count of processed statements
+- Total transactions extracted across all statements
+- Per-file table: filename, bank (infer from path/subfolder), transaction count, processed date, output CSV path
+
+**Pending**
+- Count of pending statements
+- List of pending file paths
+- If any pending files exist, prompt the user to run `/process-statements` to extract them
+
+pipeline.json is always the source of truth — after running this command it reflects the complete, current state of every PDF in the `statements/` folder.

@@ -1,19 +1,23 @@
 """
 Pipeline state tracker.
 
-Maintains pipeline.json to record which statements have been processed,
-keyed by SHA256 hash so re-naming or replacing a file is handled correctly.
+Maintains pipeline.json with the full list of all discovered bank statement PDFs,
+each with a status of "processed" or "pending".
 
 Schema of pipeline.json:
 {
-  "processed": {
+  "documents": {
     "<sha256>": {
-      "filename": "chase_april_2024.pdf",
-      "processed_at": "2024-04-09T10:30:00",
-      "transaction_count": 42,
-      "output": {
-        "csv": "output/chase_april_2024.csv",
-        "json": "output/chase_april_2024.json"
+      "filename": "N26_2024-01.pdf",
+      "path": "statements/N26/N26_2024-01.pdf",
+      "status": "processed",          # or "pending"
+      "discovered_at": "2024-04-09T10:00:00+00:00",
+      "processed_at": "2024-04-09T10:30:00+00:00",  # null if pending
+      "transaction_count": 42,                        # null if pending
+      "output": {                                     # null if pending
+        "csv": "output/individual/N26_2024-01.csv",
+        "json": "output/individual/N26_2024-01.json",
+        "cumulative": "output/cumulative.csv"
       }
     }
   }
@@ -29,9 +33,29 @@ PIPELINE_FILE = Path("pipeline.json")
 
 
 def _load() -> dict:
-    if PIPELINE_FILE.exists():
-        return json.loads(PIPELINE_FILE.read_text())
-    return {"processed": {}}
+    if not PIPELINE_FILE.exists():
+        return {"documents": {}}
+    raw = json.loads(PIPELINE_FILE.read_text())
+    # Migrate old schema: {"processed": {...}} → {"documents": {...}}
+    if "processed" in raw and "documents" not in raw:
+        raw = _migrate(raw)
+    return raw
+
+
+def _migrate(old: dict) -> dict:
+    """Migrate from the old {"processed": {}} schema to {"documents": {}}."""
+    documents = {}
+    for file_hash, entry in old.get("processed", {}).items():
+        documents[file_hash] = {
+            "filename": entry.get("filename"),
+            "path": None,  # path was not stored in old schema
+            "status": "processed",
+            "discovered_at": entry.get("processed_at"),
+            "processed_at": entry.get("processed_at"),
+            "transaction_count": entry.get("transaction_count"),
+            "output": entry.get("output"),
+        }
+    return {"documents": documents}
 
 
 def _save(state: dict) -> None:
@@ -51,16 +75,22 @@ def is_processed(pdf_path: Path) -> bool:
     """Return True if this exact file (by content hash) has already been processed."""
     file_hash = sha256(pdf_path)
     state = _load()
-    return file_hash in state["processed"]
+    doc = state["documents"].get(file_hash)
+    return doc is not None and doc.get("status") == "processed"
 
 
 def record(pdf_path: Path, transaction_count: int, csv_path: Path, json_path: Path) -> None:
     """Mark a PDF as processed in pipeline.json."""
     file_hash = sha256(pdf_path)
     state = _load()
-    state["processed"][file_hash] = {
+    now = datetime.now(timezone.utc).isoformat()
+    existing = state["documents"].get(file_hash, {})
+    state["documents"][file_hash] = {
         "filename": pdf_path.name,
-        "processed_at": datetime.now(timezone.utc).isoformat(),
+        "path": str(pdf_path),
+        "status": "processed",
+        "discovered_at": existing.get("discovered_at", now),
+        "processed_at": now,
         "transaction_count": transaction_count,
         "output": {
             "csv": str(csv_path),
@@ -71,11 +101,59 @@ def record(pdf_path: Path, transaction_count: int, csv_path: Path, json_path: Pa
     _save(state)
 
 
-def status() -> list[dict]:
-    """Return all pipeline entries as a list, sorted by processed_at descending."""
+def sync(statements_dir: Path = Path("statements")) -> None:
+    """Scan statements_dir for all PDFs and upsert them into pipeline.json.
+
+    - Already-processed entries are left untouched.
+    - Newly discovered PDFs are added with status "pending".
+    - PDFs previously marked "pending" that are no longer on disk are removed.
+    """
     state = _load()
-    entries = [{"sha256": k, **v} for k, v in state["processed"].items()]
-    entries.sort(key=lambda e: e.get("processed_at", ""), reverse=True)
+    documents = state["documents"]
+
+    # Build a map of hash → path for every PDF currently on disk
+    all_pdfs = sorted(statements_dir.rglob("*.pdf"))
+    on_disk: dict[str, Path] = {}
+    for pdf in all_pdfs:
+        h = sha256(pdf)
+        on_disk[h] = pdf
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    # Upsert: add new PDFs as "pending"; update paths for existing entries
+    for file_hash, pdf_path in on_disk.items():
+        if file_hash in documents:
+            # Keep existing entry but refresh the path in case the file moved
+            documents[file_hash]["path"] = str(pdf_path)
+            documents[file_hash]["filename"] = pdf_path.name
+        else:
+            documents[file_hash] = {
+                "filename": pdf_path.name,
+                "path": str(pdf_path),
+                "status": "pending",
+                "discovered_at": now,
+                "processed_at": None,
+                "transaction_count": None,
+                "output": None,
+            }
+
+    # Remove stale "pending" entries for PDFs no longer on disk
+    # (processed entries are kept as historical record even if file is deleted)
+    stale = [h for h, doc in documents.items()
+             if doc.get("status") == "pending" and h not in on_disk]
+    for h in stale:
+        del documents[h]
+
+    state["documents"] = documents
+    _save(state)
+
+
+def status() -> list[dict]:
+    """Return all pipeline entries as a list, sorted by status then discovered_at."""
+    state = _load()
+    entries = [{"sha256": k, **v} for k, v in state["documents"].items()]
+    # processed first, then pending; within each group newest first
+    entries.sort(key=lambda e: (e.get("status") != "processed", e.get("discovered_at", "")), reverse=False)
     return entries
 
 
@@ -86,14 +164,30 @@ def pending(statements_dir: Path = Path("statements")) -> list[Path]:
 
 
 if __name__ == "__main__":
-    # Quick status dump
+    import sys
+
+    if len(sys.argv) > 1 and sys.argv[1] == "sync":
+        sync()
+        print("pipeline.json synced.")
+
     entries = status()
     if not entries:
-        print("No statements processed yet.")
+        print("No statements found.")
     else:
-        print(f"{'File':<35} {'Transactions':>12}  {'Processed At'}")
-        print("-" * 70)
-        for e in entries:
+        processed = [e for e in entries if e.get("status") == "processed"]
+        pending_entries = [e for e in entries if e.get("status") == "pending"]
+
+        print(f"\nProcessed ({len(processed)}):")
+        print(f"  {'File':<40} {'Transactions':>12}  {'Processed At'}")
+        print("  " + "-" * 72)
+        for e in processed:
             print(
-                f"{e['filename']:<35} {e['transaction_count']:>12}  {e['processed_at'][:19]}"
+                f"  {e['filename']:<40} {e['transaction_count']:>12}  {(e.get('processed_at') or '')[:19]}"
             )
+
+        if pending_entries:
+            print(f"\nPending ({len(pending_entries)}):")
+            for e in pending_entries:
+                print(f"  - {e['path'] or e['filename']}")
+        else:
+            print("\nPending: none")

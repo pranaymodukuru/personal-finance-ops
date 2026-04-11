@@ -3,24 +3,33 @@ name: process-statements
 description: Find all unprocessed bank statement PDFs in statements/ and extract their transactions
 ---
 
-Check for unprocessed bank statement PDFs and extract their transactions.
+Check for unprocessed bank statement PDFs and extract their transactions — one agent per document.
 
 Steps:
 1. Run `python -m src.pipeline` to see what has already been processed.
 2. Run `python -c "from src.pipeline import pending; [print(p) for p in pending()]"` to list unprocessed PDFs in statements/.
 3. If there are no pending PDFs, tell the user everything is already up to date and stop.
-4. For each pending PDF:
-   a. Read the PDF using the Read tool (or fall back to `python -m src.extractor <path>` for complex layouts).
-   b. Identify the bank from the document header/branding.
-   c. Extract ALL transactions — every debit, credit, fee, and transfer visible in the document.
-   d. Normalize each transaction to the schema below.
-   e. Run `python -m src.save <pdf_path> '<transactions_json>'` to save and update pipeline.json.
-   f. Report how many transactions were found and where output was saved.
-5. Print a summary table of all transactions extracted in this run.
+4. For each pending PDF, spawn a **separate Agent** (using the Agent tool) to process it. Do NOT process documents yourself — delegate every document to its own agent to keep context isolated. Pass the full extraction prompt below as the agent's `prompt`, with the specific PDF path substituted in.
+5. Wait for all agents to complete, then print a summary table: filename, bank, transaction count, and output path for each.
+
+## Per-document agent prompt template
+
+Use this as the `prompt` for each spawned agent (substitute `{PDF_PATH}` with the actual path):
+
+```
+Process the bank statement PDF at: {PDF_PATH}
+
+Steps:
+1. Read the PDF using the Read tool (or fall back to `python -m src.extractor {PDF_PATH}` for complex layouts).
+2. Identify the bank from the document header/branding (N26, Amex, or Advanzia).
+3. Extract ALL transactions — every debit, credit, fee, and transfer visible in the document.
+4. Normalize each transaction to the schema below.
+5. Run `python -m src.save {PDF_PATH} '<transactions_json>'` to save and update pipeline.json.
+6. Report how many transactions were found and where the output CSV/JSON was saved.
 
 ## Transaction Schema
 
-All fields are required. Use `null` for fields that are not available in the source document.
+All fields are required. Use `null` for fields not available in the source document.
 
 | Field | Type | Description |
 |---|---|---|
@@ -68,3 +77,4 @@ All fields are required. Use `null` for fields that are not available in the sou
   - Clean the merchant name (remove the FX suffix) for `receiver`
 - ALTER SALDO / NEUER SALDO / EINZAHLUNG / Mindestbetrag rows are balance/payment metadata — skip them (or treat EINZAHLUNG as a credit payment if desired)
 - `payment_method = "direct_card"` unless description says PayPal
+```
