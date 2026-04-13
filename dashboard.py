@@ -140,9 +140,35 @@ def sidebar(df: pd.DataFrame):
 
     date_min = df["date"].min().date()
     date_max = df["date"].max().date()
+
+    _preset = st.sidebar.selectbox(
+        "Quick filter",
+        ["All time", "This month", "Last 3 months", "Last 6 months", "This year"],
+        index=0,
+    )
+    _today = pd.Timestamp.today().date()
+    _today_ts = pd.Timestamp.today()
+    if _preset == "This month":
+        _default_start = _today.replace(day=1)
+        _default_end = _today
+    elif _preset == "Last 3 months":
+        _default_start = (_today_ts - pd.DateOffset(months=3)).date()
+        _default_end = _today
+    elif _preset == "Last 6 months":
+        _default_start = (_today_ts - pd.DateOffset(months=6)).date()
+        _default_end = _today
+    elif _preset == "This year":
+        _default_start = _today.replace(month=1, day=1)
+        _default_end = _today
+    else:
+        _default_start = date_min
+        _default_end = date_max
+    _default_start = max(_default_start, date_min)
+    _default_end = min(_default_end, date_max)
+
     date_range = st.sidebar.date_input(
         "Date range",
-        value=(date_min, date_max),
+        value=(_default_start, _default_end),
         min_value=date_min,
         max_value=date_max,
     )
@@ -257,10 +283,72 @@ def page_overview(df: pd.DataFrame):
         fig.update_layout(title="Spend by bank / card", **chart_defaults(), showlegend=False)
         st.plotly_chart(fig, use_container_width=True)
 
+    st.markdown('<p class="section-header">Monthly Income vs Spending</p>', unsafe_allow_html=True)
+    monthly_income = (
+        income.groupby("month_dt")["amount"]
+        .sum()
+        .reset_index()
+        .rename(columns={"amount": "income"})
+    )
+    monthly_spend = (
+        spend.groupby("month_dt")["amount"]
+        .apply(lambda x: x.abs().sum())
+        .reset_index()
+        .rename(columns={"amount": "spend"})
+    )
+    monthly_flow = pd.merge(monthly_income, monthly_spend, on="month_dt", how="outer").fillna(0)
+    monthly_flow = monthly_flow.sort_values("month_dt")
+    monthly_flow["net"] = monthly_flow["income"] - monthly_flow["spend"]
+
+    fig_flow = go.Figure()
+    fig_flow.add_trace(
+        go.Bar(
+            x=monthly_flow["month_dt"],
+            y=monthly_flow["income"],
+            name="Income",
+            marker_color="#98FB98",
+            hovertemplate="<b>%{x|%b %Y}</b><br>Income: €%{y:,.2f}<extra></extra>",
+        )
+    )
+    fig_flow.add_trace(
+        go.Bar(
+            x=monthly_flow["month_dt"],
+            y=monthly_flow["spend"],
+            name="Spend",
+            marker_color="#FF6B6B",
+            hovertemplate="<b>%{x|%b %Y}</b><br>Spend: €%{y:,.2f}<extra></extra>",
+        )
+    )
+    fig_flow.add_trace(
+        go.Scatter(
+            x=monthly_flow["month_dt"],
+            y=monthly_flow["net"],
+            name="Net Savings",
+            mode="lines+markers",
+            line=dict(color="#FFD700", width=2),
+            marker=dict(size=6),
+            hovertemplate="<b>%{x|%b %Y}</b><br>Net: €%{y:,.2f}<extra></extra>",
+        )
+    )
+    fig_flow.update_layout(
+        barmode="group",
+        xaxis_tickformat="%b %Y",
+        legend=dict(orientation="h", y=-0.15),
+        **chart_defaults(),
+    )
+    st.plotly_chart(fig_flow, use_container_width=True)
+
     st.markdown('<p class="section-header">All Transactions</p>', unsafe_allow_html=True)
+    _search = st.text_input("Search", placeholder="Filter by merchant or description…", label_visibility="collapsed")
     display = df[["date", "receiver", "description", "amount", "category", "payment_method", "bank", "city"]].copy()
     display["date"] = display["date"].dt.strftime("%Y-%m-%d")
     display["amount"] = display["amount"].apply(lambda x: f"€{x:+.2f}")
+    if _search:
+        _mask = (
+            display["receiver"].str.contains(_search, case=False, na=False)
+            | display["description"].str.contains(_search, case=False, na=False)
+        )
+        display = display[_mask]
     st.dataframe(display, use_container_width=True, hide_index=True)
 
 
@@ -346,14 +434,27 @@ def page_trends(df: pd.DataFrame):
         st.info("No spending data in the selected range.")
         return
 
-    # Monthly total
-    st.markdown('<p class="section-header">Monthly Total Spend</p>', unsafe_allow_html=True)
     monthly = (
         spend.groupby("month_dt")["amount"]
         .apply(lambda x: x.abs().sum())
         .reset_index()
         .rename(columns={"amount": "total"})
+        .sort_values("month_dt")
     )
+
+    if len(monthly) >= 2:
+        _cur = monthly.iloc[-1]["total"]
+        _prev = monthly.iloc[-2]["total"]
+        _delta_pct = (_cur - _prev) / _prev * 100 if _prev else 0
+        _cur_label = monthly.iloc[-1]["month_dt"].strftime("%b %Y")
+        _prev_label = monthly.iloc[-2]["month_dt"].strftime("%b %Y")
+        m1, m2, m3 = st.columns(3)
+        m1.metric(f"Spend — {_cur_label}", fmt_eur(_cur), delta=f"{_delta_pct:+.1f}% vs prior month", delta_color="inverse")
+        m2.metric(f"Spend — {_prev_label}", fmt_eur(_prev))
+        m3.metric("Avg monthly spend", fmt_eur(monthly["total"].mean()))
+
+    # Monthly total
+    st.markdown('<p class="section-header">Monthly Total Spend</p>', unsafe_allow_html=True)
     fig = go.Figure()
     fig.add_trace(
         go.Bar(
@@ -381,18 +482,20 @@ def page_trends(df: pd.DataFrame):
     col_left, col_right = st.columns(2)
 
     with col_left:
-        st.markdown('<p class="section-header">Spend by Day of Month</p>', unsafe_allow_html=True)
+        st.markdown('<p class="section-header">Avg Daily Spend by Day of Month</p>', unsafe_allow_html=True)
+        _n_months = max(spend["month_dt"].nunique(), 1)
         day_spend = (
             spend.groupby("day_of_month")["amount"]
             .apply(lambda x: x.abs().sum())
             .reset_index()
             .rename(columns={"amount": "total"})
         )
+        day_spend["total"] = day_spend["total"] / _n_months
         fig2 = px.bar(
             day_spend,
             x="day_of_month",
             y="total",
-            labels={"day_of_month": "Day of Month", "total": "EUR"},
+            labels={"day_of_month": "Day of Month", "total": "Avg EUR"},
             color="total",
             color_continuous_scale="Blues",
         )
@@ -459,6 +562,69 @@ def page_savings(df: pd.DataFrame):
     c1.metric("Total Income", fmt_eur(total_income))
     c2.metric("Moved to Spaces", fmt_eur(transfers_out))
     c3.metric("Savings Rate", f"{savings_rate:.1f}%", help="% of income moved to N26 Spaces")
+
+    st.markdown('<p class="section-header">Monthly Savings Rate</p>', unsafe_allow_html=True)
+    _monthly_inc = (
+        income.groupby("month_dt")["amount"].sum().reset_index().rename(columns={"amount": "income"})
+    )
+    _transfers_monthly = checking[
+        (checking["category"] == "transfer") & (checking["type"] == "debit")
+    ].copy()
+    if not _transfers_monthly.empty:
+        _monthly_tr = (
+            _transfers_monthly.groupby("month_dt")["amount"]
+            .apply(lambda x: x.abs().sum())
+            .reset_index()
+            .rename(columns={"amount": "transferred"})
+        )
+    else:
+        _monthly_tr = pd.DataFrame(columns=["month_dt", "transferred"])
+    _monthly_sr = pd.merge(_monthly_inc, _monthly_tr, on="month_dt", how="left").fillna(0)
+    _monthly_sr = _monthly_sr.sort_values("month_dt")
+    _monthly_sr["rate"] = _monthly_sr.apply(
+        lambda r: r["transferred"] / r["income"] * 100 if r["income"] > 0 else 0, axis=1
+    )
+    if not _monthly_sr.empty:
+        fig_sr = go.Figure()
+        fig_sr.add_trace(
+            go.Bar(
+                x=_monthly_sr["month_dt"],
+                y=_monthly_sr["income"],
+                name="Income",
+                marker_color="#98FB98",
+                hovertemplate="<b>%{x|%b %Y}</b><br>Income: €%{y:,.2f}<extra></extra>",
+            )
+        )
+        fig_sr.add_trace(
+            go.Bar(
+                x=_monthly_sr["month_dt"],
+                y=_monthly_sr["transferred"],
+                name="Saved to Spaces",
+                marker_color="#87CEEB",
+                hovertemplate="<b>%{x|%b %Y}</b><br>Saved: €%{y:,.2f}<extra></extra>",
+            )
+        )
+        fig_sr.add_trace(
+            go.Scatter(
+                x=_monthly_sr["month_dt"],
+                y=_monthly_sr["rate"],
+                name="Savings Rate %",
+                yaxis="y2",
+                mode="lines+markers",
+                line=dict(color="#FFD700", width=2),
+                marker=dict(size=6),
+                hovertemplate="<b>%{x|%b %Y}</b><br>Rate: %{y:.1f}%<extra></extra>",
+            )
+        )
+        fig_sr.update_layout(
+            barmode="group",
+            xaxis_tickformat="%b %Y",
+            yaxis=dict(title="EUR"),
+            yaxis2=dict(title="Savings Rate %", overlaying="y", side="right", showgrid=False),
+            legend=dict(orientation="h", y=-0.15),
+            **chart_defaults(),
+        )
+        st.plotly_chart(fig_sr, use_container_width=True)
 
     if spaces_df.empty:
         st.info("No N26 Space transactions in the selected range.")
@@ -798,7 +964,8 @@ def page_investment(df: pd.DataFrame):
         .rename(columns={"amount": "total"})
         .sort_values("total", ascending=False)
     )
-    spend_by_cat["annual_est"] = spend_by_cat["total"] * 12
+    _n_months_data = max(spend["month_dt"].nunique(), 1)
+    spend_by_cat["annual_est"] = spend_by_cat["total"] / _n_months_data * 12
     spend_by_cat["saving_20pct"] = spend_by_cat["annual_est"] * 0.20
     spend_by_cat["invested_10yr"] = spend_by_cat["saving_20pct"] / 12 * (
         ((1 + 0.07 / 12) ** 120 - 1) / (0.07 / 12)
