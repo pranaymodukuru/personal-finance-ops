@@ -10,6 +10,8 @@ import plotly.graph_objects as go
 import streamlit as st
 from pathlib import Path
 
+from src.pipeline import status as pipeline_status
+
 # ── Page config ──────────────────────────────────────────────────────────────
 st.set_page_config(
     page_title="Personal Finance",
@@ -63,6 +65,11 @@ BANK_COLORS = {
 }
 
 # ── Data loading ──────────────────────────────────────────────────────────────
+@st.cache_data
+def load_pipeline_status_data() -> list[dict]:
+    return pipeline_status()
+
+
 @st.cache_data
 def load_data() -> pd.DataFrame:
     if not CUMULATIVE_CSV.exists():
@@ -120,6 +127,7 @@ def sidebar(df: pd.DataFrame):
             "Travel & FX",
             "Merchant Intelligence",
             "Investment Potential",
+            "Pipeline Status",
         ],
         label_visibility="collapsed",
     )
@@ -150,6 +158,36 @@ def sidebar(df: pd.DataFrame):
     st.sidebar.divider()
     st.sidebar.caption(f"{len(filtered)} transactions loaded")
     st.sidebar.caption("Add PDFs → `statements/` and run `/process-statements`")
+
+    # ── Pipeline status ───────────────────────────────────────────────────────
+    st.sidebar.divider()
+    st.sidebar.markdown("**Pipeline**")
+    entries = load_pipeline_status_data()
+    processed_entries = [e for e in entries if e.get("status") == "processed"]
+    pending_entries = [e for e in entries if e.get("status") == "pending"]
+    total_tx = sum(e.get("transaction_count") or 0 for e in processed_entries)
+
+    p1, p2 = st.sidebar.columns(2)
+    p1.metric("Processed", len(processed_entries))
+    p2.metric("Pending", len(pending_entries))
+    st.sidebar.caption(f"{total_tx:,} transactions extracted")
+
+    if entries:
+        with st.sidebar.expander("Statement details", expanded=False):
+            for e in processed_entries:
+                tx = e.get("transaction_count") or 0
+                processed_at = (e.get("processed_at") or "")[:10]
+                st.markdown(
+                    f"✅ **{e['filename']}**  \n"
+                    f"<span style='font-size:0.75rem;opacity:0.65'>{tx} txns · {processed_at}</span>",
+                    unsafe_allow_html=True,
+                )
+            for e in pending_entries:
+                st.markdown(
+                    f"⏳ **{e['filename']}**  \n"
+                    "<span style='font-size:0.75rem;opacity:0.65'>pending</span>",
+                    unsafe_allow_html=True,
+                )
 
     return page, filtered
 
@@ -782,6 +820,86 @@ def page_investment(df: pd.DataFrame):
     )
 
 
+# ── Page 8: Pipeline Status ──────────────────────────────────────────────────
+def page_pipeline_status(df: pd.DataFrame):
+    st.title("Pipeline Status")
+
+    entries = load_pipeline_status_data()
+
+    if not entries:
+        st.info("No statements discovered yet. Add PDFs to `statements/` and run `/process-statements`.")
+        return
+
+    processed_entries = [e for e in entries if e.get("status") == "processed"]
+    pending_entries = [e for e in entries if e.get("status") == "pending"]
+    total = len(entries)
+    n_processed = len(processed_entries)
+    n_pending = len(pending_entries)
+    total_tx = sum(e.get("transaction_count") or 0 for e in processed_entries)
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Total Statements", total)
+    c2.metric("Processed", n_processed)
+    c3.metric("Pending", n_pending)
+    c4.metric("Transactions Extracted", f"{total_tx:,}")
+
+    progress = n_processed / total if total else 0
+    st.progress(progress, text=f"{progress*100:.0f}% of statements processed")
+
+    # ── Processed statements ─────────────────────────────────────────────────
+    if processed_entries:
+        st.markdown('<p class="section-header">Processed Statements</p>', unsafe_allow_html=True)
+
+        processed_df = pd.DataFrame([
+            {
+                "File": e["filename"],
+                "Transactions": e.get("transaction_count") or 0,
+                "Processed At": (e.get("processed_at") or "")[:19].replace("T", " "),
+                "Discovered At": (e.get("discovered_at") or "")[:19].replace("T", " "),
+                "Output CSV": (e.get("output") or {}).get("csv", ""),
+            }
+            for e in processed_entries
+        ])
+
+        col_left, col_right = st.columns([2, 1])
+
+        with col_left:
+            st.dataframe(processed_df, hide_index=True, use_container_width=True)
+
+        with col_right:
+            fig = go.Figure(
+                go.Bar(
+                    x=processed_df["Transactions"],
+                    y=processed_df["File"],
+                    orientation="h",
+                    marker_color="#00E5B4",
+                    hovertemplate="<b>%{y}</b><br>%{x} transactions<extra></extra>",
+                )
+            )
+            fig.update_layout(
+                title="Transactions per statement",
+                yaxis=dict(autorange="reversed"),
+                **chart_defaults(),
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+    # ── Pending statements ───────────────────────────────────────────────────
+    if pending_entries:
+        st.markdown('<p class="section-header">Pending Statements</p>', unsafe_allow_html=True)
+        pending_df = pd.DataFrame([
+            {
+                "File": e["filename"],
+                "Path": e.get("path") or "",
+                "Discovered At": (e.get("discovered_at") or "")[:19].replace("T", " "),
+            }
+            for e in pending_entries
+        ])
+        st.dataframe(pending_df, hide_index=True, use_container_width=True)
+        st.info(f"{n_pending} statement(s) waiting — run `/process-statements` to extract transactions.")
+    else:
+        st.success("All discovered statements have been processed.")
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     df = load_data()
@@ -800,6 +918,7 @@ def main():
         "Travel & FX": page_travel,
         "Merchant Intelligence": page_merchants,
         "Investment Potential": page_investment,
+        "Pipeline Status": page_pipeline_status,
     }
 
     pages[page](filtered)
