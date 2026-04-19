@@ -38,6 +38,21 @@ SPARSE_COLS = [
     "payment_method", "reference", "space", "city",
 ]
 
+# (pattern, canonical_name)
+_RECEIVER_NORMALIZATION: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"^rewe\b.*", re.I), "REWE"),
+    (re.compile(r"^netto\b.*", re.I), "Netto"),
+    (re.compile(r"^aldi\s+s[uüe]+[ed]?\b.*", re.I), "Aldi Süd"),
+    (re.compile(r"^penny\b.*", re.I), "Penny"),
+    (re.compile(r"^kaufland\b.*", re.I), "Kaufland"),
+    (re.compile(r"^edeka\b.*", re.I), "Edeka"),
+    (re.compile(r"^lidl\b.*", re.I), "Lidl"),
+    (re.compile(r"^billa\b.*", re.I), "Billa"),
+    (re.compile(r"^(interspar|spar)\b.*", re.I), "Spar"),
+    (re.compile(r"^spicelands\b.*", re.I), "Spicelands"),
+    (re.compile(r"^dookan\.com$|^sp\s+dookan$", re.I), "Dookan"),
+]
+
 VALID_CATEGORIES = {
     "food", "transport", "utilities", "entertainment", "healthcare",
     "shopping", "income", "savings", "transfer", "fees", "other", "insurance", "learning", "travel",
@@ -95,6 +110,7 @@ def clean(
     df = _load(input_path)
     df, dedup_report = _dedup(df)
     df = _normalize_text(df)
+    df = _normalize_receivers(df)
     df, reclassify_report = _reclassify_categories(df)
     df = _empty_to_nan(df)
     df = _coerce_types(df)
@@ -136,6 +152,14 @@ def _normalize_text(df: pd.DataFrame) -> pd.DataFrame:
     for col in ENUM_COLS:
         if col in df.columns:
             df[col] = df[col].str.lower()
+    return df
+
+
+def _normalize_receivers(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
+    for pattern, canonical in _RECEIVER_NORMALIZATION:
+        mask = df["receiver"].str.match(pattern, na=False)
+        df.loc[mask, "receiver"] = canonical
     return df
 
 
