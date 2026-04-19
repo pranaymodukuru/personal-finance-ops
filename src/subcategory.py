@@ -14,14 +14,14 @@ _FOOD: list[tuple[re.Pattern, str]] = [
 ]
 
 _SHOPPING: list[tuple[re.Pattern, str]] = [
-    (re.compile(r"\bh\.m\b|zaful|tom tailor|under armour|lpp deutschland"
+    (re.compile(r"\bh&m\b|\bh\.m\b|\bh\s?&\s?m\b|zaful|tom tailor|under armour|lpp deutschland"
                 r"|stradun fashion|galeria|karstadt|deichmann|swarovski"
                 r"|estee lauder|luxottica|etsy", re.I), "clothing_fashion"),
     (re.compile(r"media markt|apple store", re.I), "electronics"),
     (re.compile(r"xxxlutz|möbelix|moebelix|ikea|zwilling", re.I), "home_furniture"),
-    (re.compile(r"\bintersport\b", re.I), "sports_outdoor"),
-    (re.compile(r"dm.drogerie|dm markt|dm-drogerie|\bdm\b.*offenbach"
-                r"|drogerie markt", re.I), "beauty_drugstore"),
+    (re.compile(r"\bintersport\b|3wickets", re.I), "sports_outdoor"),
+    (re.compile(r"dm.drogerie|dm markt|dm-drogerie|\bdm\b.*drogerie"
+                r"|\bdm\b.*offenbach|drogerie markt", re.I), "beauty_drugstore"),
     (re.compile(r"amazon|amzn|joinandsell", re.I), "general_online"),
 ]
 
@@ -32,16 +32,20 @@ _TRANSPORT: list[tuple[re.Pattern, str]] = [
     (re.compile(r"travelgenio|airline|lufthansa|ryanair|easyjet|flight", re.I), "flight"),
     (re.compile(r"\brmv\b|vgf|mvv|automat \d{4}|public transport", re.I), "local_transit"),
     (re.compile(r"jadrolinija|ferry|ionios", re.I), "ferry"),
-    (re.compile(r"airbnb", re.I), "accommodation_travel"),
     (re.compile(r"omio", re.I), "booking_platform"),
+    (re.compile(r"\bvolkswagen\b|\bvw\b(?!ohl)|aral\b|shell\b|bp\b|esso\b"
+                r"|tankstelle|total.*station|jet.*tank|hem\b"
+                r"|sixt\b|europcar|hertz\b|avis\b|enterprise.*rent|buchbinder", re.I), "car"),
 ]
 
 _UTILITIES: list[tuple[re.Pattern, str]] = [
     (re.compile(r"mobilcom|drillisch|vodafone|premiumsim|\bo2\b|telekom"
                 r"|sim card|mobile plan", re.I), "mobile_phone"),
+    (re.compile(r"\bdt\.?\s*net\b|d\.t\.net", re.I), "internet"),
     (re.compile(r"kabel deutschland|internet|dsl|cable", re.I), "internet_tv"),
     (re.compile(r"miete|kauselmann|tannert|bettinastrasse|rent payment"
-                r"|rent share|gundlach", re.I), "rent"),
+                r"|rent share|gundlach|urbane wohnwerte|wohnwerte.*ii"
+                r"|hamburg.*team.*urban", re.I), "rent"),
     (re.compile(r"nebenkosten|gez|rundfunk|heizung|strom|ancillary"
                 r"|utility costs", re.I), "ancillary_costs"),
 ]
@@ -66,9 +70,10 @@ _INCOME: list[tuple[re.Pattern, str]] = [
 ]
 
 _SAVINGS: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"volkswohl", re.I), "etf_investments"),
     (re.compile(r"scalable|sparplan|etf|fonds|invest|broker", re.I), "etf_investments"),
     (re.compile(r"binance|coinbase|crypto|bitcoin", re.I), "crypto"),
-    (re.compile(r"lebensversicherung|volkswohl", re.I), "pension_insurance"),
+    (re.compile(r"lebensversicherung", re.I), "pension_insurance"),
 ]
 
 _FEES: list[tuple[re.Pattern, str]] = [
@@ -81,6 +86,8 @@ _FEES: list[tuple[re.Pattern, str]] = [
 _HEALTHCARE: list[tuple[re.Pattern, str]] = [
     (re.compile(r"mcfit|rsg group|betterme|fitness|gym", re.I), "gym_fitness"),
     (re.compile(r"medicorum|arzt|apotheke|doctor|pharmacy|hospital|klinik", re.I), "medical"),
+    (re.compile(r"cricket verein|turnverein|sportverein|sport.*verein"
+                r"|stuttgart cricket|frankonia nurnberg|atv.*1873", re.I), "sports_club"),
 ]
 
 _OTHER: list[tuple[re.Pattern, str]] = [
@@ -97,6 +104,16 @@ _TRANSFER: list[tuple[re.Pattern, str]] = [
     (re.compile(r"paypal", re.I), "payment_platform"),
     (re.compile(r"scalable|broker|investment|sparplan", re.I), "investment_transfer"),
     (re.compile(r"moneybeam|shreya|jalal|praetzas|nutakki", re.I), "person_transfer"),
+]
+
+_LEARNING: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"datapart|fahrschule", re.I), "driving_licence"),
+    (re.compile(r"big academy", re.I), "courses"),
+]
+
+_TRAVEL: list[tuple[re.Pattern, str]] = [
+    (re.compile(r"\bhotel\b|hostel|bb hotels|guesthouse|guest\s?house"
+                r"|airbnb|übernachtung", re.I), "accommodation"),
 ]
 
 _ATM_PM = re.compile(r"atm", re.I)
@@ -175,6 +192,18 @@ def assign_subcategory(row: dict[str, Any]) -> str:
             if pattern.search(text):
                 return label
         return "other_transfer"
+
+    if cat == "learning":
+        for pattern, label in _LEARNING:
+            if pattern.search(text):
+                return label
+        return "other_learning"
+
+    if cat == "travel":
+        for pattern, label in _TRAVEL:
+            if pattern.search(text):
+                return label
+        return "other_travel"
 
     if cat == "insurance":
         return "insurance"

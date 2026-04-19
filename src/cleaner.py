@@ -40,23 +40,34 @@ SPARSE_COLS = [
 
 VALID_CATEGORIES = {
     "food", "transport", "utilities", "entertainment", "healthcare",
-    "shopping", "income", "savings", "transfer", "fees", "other", "insurance",
+    "shopping", "income", "savings", "transfer", "fees", "other", "insurance", "learning", "travel",
 }
 
 # (pattern, field, from_category_filter, to_category)
 # field: "receiver" | "description" | "both"
 # from_category_filter: only apply if current category matches (None = apply to any)
 _RECLASSIFY_RULES: list[tuple[re.Pattern, str, str | None, str]] = [
-    (re.compile(r"\bhotel\b|hostel|bb hotels|guesthouse|guest\s?house", re.I), "receiver", None, "transport"),
-    (re.compile(r"airbnb", re.I), "receiver", None, "transport"),
+    (re.compile(r"\bhotel\b|hostel|bb hotels|guesthouse|guest\s?house", re.I), "receiver", None, "travel"),
+    (re.compile(r"airbnb", re.I), "receiver", None, "travel"),
     (re.compile(r"thalia|hugendubel", re.I), "receiver", "entertainment", "shopping"),
+    (re.compile(r"3wickets", re.I), "receiver", None, "shopping"),
+    (re.compile(r"big academy", re.I), "receiver", None, "learning"),
+    (re.compile(r"fahrschule punkt offenbach|fahrschule.*offenbach", re.I), "receiver", None, "learning"),
+    (re.compile(r"\bh&m\b|\bh\.m\b|\bh\s?&\s?m\b", re.I), "receiver", None, "shopping"),
+    (re.compile(r"volkswohl", re.I), "receiver", None, "savings"),
+    (re.compile(r"urbane wohnwerte|wohnwerte.*ii|hamburg.*team.*urban", re.I), "receiver", None, "utilities"),
+    (re.compile(r"\bdt\.?\s*net\b|d\.t\.net", re.I), "receiver", None, "utilities"),
+    (re.compile(r"datapart", re.I), "receiver", None, "learning"),
+    (re.compile(r"dm.drogerie|dm markt|dm-drogerie|\bdm\b.*drogerie|drogerie markt", re.I), "receiver", None, "shopping"),
+    (re.compile(r"stuttgart cricket verein|allgemeiner turnverein.*frankonia"
+                r"|atv.*1873.*frankonia", re.I), "receiver", None, "healthcare"),
 ]
 
 # (pattern, field, expected_category, skip_if_current_in)
 # skip_if_current_in: categories where the current assignment is plausibly correct — don't flag
 _CATEGORY_SIGNALS: list[tuple[re.Pattern, str, str, set[str]]] = [
-    (re.compile(r"\bhotel\b|hostel|bb hotels|guesthouse|guest\s?house", re.I), "receiver", "transport", {"transport"}),
-    (re.compile(r"airbnb", re.I), "receiver", "transport", {"transport"}),
+    (re.compile(r"\bhotel\b|hostel|bb hotels|guesthouse|guest\s?house", re.I), "receiver", "travel", {"travel"}),
+    (re.compile(r"airbnb", re.I), "receiver", "travel", {"travel"}),
     (re.compile(r"thalia|hugendubel", re.I), "receiver", "shopping", {"shopping"}),
     (re.compile(r"rewe|netto|lidl|aldi|edeka|penny|kaufland|lebensmittel", re.I), "receiver", "food", {"food"}),
     (re.compile(r"deutsche bahn|db vertrieb|öbb|oebb|flixbus|lufthansa|ryanair|easyjet", re.I), "receiver", "transport", {"transport", "income", "fees"}),
