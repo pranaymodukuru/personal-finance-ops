@@ -12,16 +12,20 @@ pf-ops/
 │   └── Advanzia/
 ├── output/
 │   ├── individual/          # Per-statement CSV + JSON files
-│   └── cumulative.csv       # All transactions combined across all statements
+│   ├── cumulative.csv       # All transactions combined across all statements (raw)
+│   └── cleaned_cumulative.csv  # Cleaned + enriched data with subcategories (dashboard reads this)
 ├── src/
 │   ├── extractor.py         # PDF → raw text (pdfplumber); fallback for complex layouts
 │   ├── pipeline.py          # Pipeline state tracker (reads/writes pipeline.json)
-│   └── save.py              # Writes transactions to CSV + JSON and updates pipeline.json
+│   ├── save.py              # Writes transactions to CSV + JSON and updates pipeline.json
+│   ├── cleaner.py           # Cleaning pipeline: dedup, normalize, validate, assign subcategories
+│   └── subcategory.py       # assign_subcategory() — regex-based subcategory classification
 ├── .claude/
 │   └── skills/
 │       ├── process-statements/SKILL.md  # /process-statements slash command
 │       ├── pipeline-status/SKILL.md     # /pipeline-status slash command
-│       └── reprocess/SKILL.md           # /reprocess slash command
+│       ├── reprocess/SKILL.md           # /reprocess slash command
+│       └── clean-data/SKILL.md          # /clean-data slash command
 ├── pipeline.json            # Auto-generated; tracks processed files by SHA256 hash
 ├── CLAUDE.md
 └── pyproject.toml
@@ -42,6 +46,15 @@ No API key required. Claude Code reads PDFs directly and extracts transactions i
 | `/process-statements` | Find all unprocessed PDFs in `statements/` and extract their transactions |
 | `/pipeline-status` | Show which files have been processed, transaction counts, and what's pending |
 | `/reprocess [file]` | Force re-extract a specific statement even if already processed |
+| `/clean-data` | Clean and normalize `cumulative.csv` → `cleaned_cumulative.csv`; dedup, validate, assign subcategories |
+
+### Recommended workflow
+
+```
+/process-statements   →  output/cumulative.csv  (raw, 16 cols)
+/clean-data           →  output/cleaned_cumulative.csv  (18 cols: +is_internal_transfer, +subcategory)
+/start-dashboard      →  reads cleaned_cumulative.csv
+```
 
 ## Pipeline Tracking
 

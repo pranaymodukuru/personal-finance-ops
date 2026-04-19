@@ -42,7 +42,9 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-CUMULATIVE_CSV = Path("output/cumulative.csv")
+# CUMULATIVE_CSV = Path("output/cumulative.csv")
+CUMULATIVE_CSV = Path("output/cleaned_cumulative.csv")
+
 
 CATEGORY_COLORS = {
     "food": "#FF6B6B",
@@ -122,6 +124,8 @@ def sidebar(df: pd.DataFrame):
         [
             "Overview",
             "Category Breakdown",
+            "Subcategory Breakdown",
+            "Transaction Editor",
             "Spending Trends",
             "Savings & Spaces",
             "Travel & FX",
@@ -424,7 +428,128 @@ def page_categories(df: pd.DataFrame):
     )
 
 
-# ── Page 3: Spending Trends ───────────────────────────────────────────────────
+# ── Page 3: Subcategory Breakdown ───────────────────────────────────────────────
+def page_subcategories(df: pd.DataFrame):
+    st.title("Subcategory Breakdown")
+
+    if "subcategory" not in df.columns:
+        st.warning(
+            "`subcategory` column not found. Re-run the `data_exploration` notebook to generate it."
+        )
+        return
+
+    spend = real_spend(df)
+    if spend.empty:
+        st.info("No spending data in the selected range.")
+        return
+
+    spend["subcategory"] = spend["subcategory"].fillna("unclassified")
+
+    spendable_cats = sorted(spend["category"].dropna().unique().tolist())
+    selected_cat = st.selectbox("Category", spendable_cats, index=0)
+    cat_spend = spend[spend["category"] == selected_cat]
+
+    total = cat_spend["amount"].abs().sum()
+    n_tx = len(cat_spend)
+    n_sub = cat_spend["subcategory"].nunique()
+    m1, m2, m3 = st.columns(3)
+    m1.metric("Total Spend", fmt_eur(total))
+    m2.metric("Transactions", n_tx)
+    m3.metric("Subcategories", n_sub)
+
+    sub_agg = (
+        cat_spend.groupby("subcategory")["amount"]
+        .apply(lambda x: x.abs().sum())
+        .reset_index()
+        .rename(columns={"amount": "total"})
+        .sort_values("total", ascending=False)
+    )
+    sub_agg["pct"] = (sub_agg["total"] / sub_agg["total"].sum() * 100).round(1)
+    sub_agg["total_fmt"] = sub_agg["total"].apply(fmt_eur)
+    tx_counts = cat_spend.groupby("subcategory").size().reset_index(name="n_tx")
+    sub_agg = sub_agg.merge(tx_counts, on="subcategory", how="left")
+    sub_agg["avg_tx"] = (sub_agg["total"] / sub_agg["n_tx"]).apply(fmt_eur)
+
+    colors = px.colors.qualitative.Set3
+    color_map = {
+        sub: colors[i % len(colors)]
+        for i, sub in enumerate(sub_agg["subcategory"].tolist())
+    }
+
+    st.markdown('<p class="section-header">Spend by Subcategory</p>', unsafe_allow_html=True)
+    col_left, col_right = st.columns([1, 2])
+
+    with col_left:
+        fig_donut = px.pie(
+            sub_agg,
+            names="subcategory",
+            values="total",
+            hole=0.45,
+            color="subcategory",
+            color_discrete_map=color_map,
+        )
+        fig_donut.update_traces(textposition="inside", textinfo="percent+label")
+        fig_donut.update_layout(showlegend=False, **chart_defaults())
+        st.plotly_chart(fig_donut, use_container_width=True)
+
+    with col_right:
+        monthly_sub = (
+            cat_spend.groupby(["month_dt", "subcategory"])["amount"]
+            .apply(lambda x: x.abs().sum())
+            .reset_index()
+        )
+        if not monthly_sub.empty:
+            fig_bar = px.bar(
+                monthly_sub,
+                x="month_dt",
+                y="amount",
+                color="subcategory",
+                color_discrete_map=color_map,
+                labels={"month_dt": "Month", "amount": "EUR", "subcategory": "Subcategory"},
+                barmode="stack",
+            )
+            fig_bar.update_layout(xaxis_tickformat="%b %Y", **chart_defaults())
+            st.plotly_chart(fig_bar, use_container_width=True)
+
+    st.markdown('<p class="section-header">Summary</p>', unsafe_allow_html=True)
+    st.dataframe(
+        sub_agg[["subcategory", "total_fmt", "pct", "n_tx", "avg_tx"]].rename(
+            columns={
+                "subcategory": "Subcategory",
+                "total_fmt": "Total",
+                "pct": "% of Category",
+                "n_tx": "# Transactions",
+                "avg_tx": "Avg / Tx",
+            }
+        ),
+        hide_index=True,
+        use_container_width=True,
+    )
+
+    st.markdown('<p class="section-header">Top Merchants per Subcategory</p>', unsafe_allow_html=True)
+    for subcat in sub_agg["subcategory"].tolist():
+        sub_rows = cat_spend[cat_spend["subcategory"] == subcat]
+        merchants = (
+            sub_rows.groupby("receiver")["amount"]
+            .agg(total=lambda x: x.abs().sum(), count="count")
+            .reset_index()
+            .sort_values("total", ascending=False)
+            .head(8)
+        )
+        merchants["total"] = merchants["total"].apply(fmt_eur)
+        with st.expander(
+            f"**{subcat}** — {fmt_eur(sub_rows['amount'].abs().sum())}  ({len(sub_rows)} transactions)"
+        ):
+            st.dataframe(
+                merchants.rename(
+                    columns={"receiver": "Merchant", "total": "Total", "count": "# Tx"}
+                ),
+                hide_index=True,
+                use_container_width=True,
+            )
+
+
+# ── Page 4: Spending Trends ───────────────────────────────────────────────────
 def page_trends(df: pd.DataFrame):
     st.title("Spending Trends")
 
@@ -1067,6 +1192,106 @@ def page_pipeline_status(df: pd.DataFrame):
         st.success("All discovered statements have been processed.")
 
 
+# ── Page 9: Transaction Editor ───────────────────────────────────────────────
+def page_transaction_editor(df: pd.DataFrame):
+    st.title("Transaction Explorer & Editor")
+    st.caption(
+        "Filter by category/subcategory, then edit **Category**, **Subcategory**, or **Receiver** inline. "
+        "Hit **Save changes** to persist back to the data file."
+    )
+
+    all_cats = sorted(
+        set(list(CATEGORY_COLORS.keys())) | set(df["category"].dropna().unique().tolist())
+    )
+    all_subcats = sorted(df["subcategory"].dropna().unique().tolist()) if "subcategory" in df.columns else []
+
+    col_f, col_sf, col_m1, col_m2, col_m3 = st.columns([2, 2, 1, 1, 1])
+    with col_f:
+        selected_cat = st.selectbox("Category", ["— All —"] + all_cats)
+    with col_sf:
+        subcat_options = (
+            sorted(df[df["category"] == selected_cat]["subcategory"].dropna().unique().tolist())
+            if selected_cat != "— All —" else all_subcats
+        )
+        selected_subcat = st.selectbox("Subcategory", ["— All —"] + subcat_options)
+
+    view = df if selected_cat == "— All —" else df[df["category"] == selected_cat]
+    if selected_subcat != "— All —":
+        view = view[view["subcategory"] == selected_subcat]
+    debits = view[view["type"] == "debit"]
+    credits = view[view["type"] == "credit"]
+
+    with col_m1:
+        st.metric("Transactions", len(view))
+    with col_m2:
+        st.metric("Total Spend", fmt_eur(debits["amount"].abs().sum()))
+    with col_m3:
+        st.metric("Total Income", fmt_eur(credits["amount"].sum()))
+
+    st.markdown('<p class="section-header">Transactions</p>', unsafe_allow_html=True)
+
+    has_subcategory = "subcategory" in view.columns
+    edit_cols = ["date", "receiver", "description", "amount", "category"] + \
+                (["subcategory"] if has_subcategory else []) + \
+                ["type", "bank", "payment_method"]
+    display = view[edit_cols].copy()
+    display["date"] = display["date"].dt.strftime("%Y-%m-%d")
+
+    edited = st.data_editor(
+        display,
+        column_config={
+            "date": st.column_config.TextColumn("Date", disabled=True),
+            "receiver": st.column_config.TextColumn("Receiver"),
+            "description": st.column_config.TextColumn("Description", disabled=True),
+            "amount": st.column_config.NumberColumn("Amount (EUR)", format="€%.2f", disabled=True),
+            "category": st.column_config.SelectboxColumn(
+                "Category",
+                options=all_cats,
+                required=True,
+            ),
+            "subcategory": st.column_config.SelectboxColumn(
+                "Subcategory",
+                options=all_subcats,
+                required=False,
+            ),
+            "type": st.column_config.TextColumn("Type", disabled=True),
+            "bank": st.column_config.TextColumn("Bank", disabled=True),
+            "payment_method": st.column_config.TextColumn("Method", disabled=True),
+        },
+        hide_index=True,
+        use_container_width=True,
+        num_rows="fixed",
+        key=f"tx_editor_{selected_cat}_{selected_subcat}",
+    )
+
+    cat_changed = display["category"] != edited["category"]
+    sub_changed = (
+        display["subcategory"].fillna("") != edited["subcategory"].fillna("")
+        if has_subcategory else pd.Series(False, index=display.index)
+    )
+    rec_changed = display["receiver"].fillna("") != edited["receiver"].fillna("")
+    changed_mask = cat_changed | sub_changed | rec_changed
+    n_changed = int(changed_mask.sum())
+
+    save_col, info_col = st.columns([1, 4])
+    with save_col:
+        save_clicked = st.button("Save changes", type="primary", disabled=(n_changed == 0))
+    with info_col:
+        if n_changed > 0:
+            st.info(f"{n_changed} row(s) modified — not yet saved.")
+
+    if save_clicked:
+        raw = pd.read_csv(CUMULATIVE_CSV)
+        for orig_idx in changed_mask[changed_mask].index:
+            raw.at[orig_idx, "category"] = edited.at[orig_idx, "category"]
+            raw.at[orig_idx, "subcategory"] = edited.at[orig_idx, "subcategory"]
+            raw.at[orig_idx, "receiver"] = edited.at[orig_idx, "receiver"]
+        raw.to_csv(CUMULATIVE_CSV, index=False)
+        st.cache_data.clear()
+        st.success(f"Saved {n_changed} change(s) to `{CUMULATIVE_CSV}`.")
+        st.rerun()
+
+
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
     df = load_data()
@@ -1080,6 +1305,8 @@ def main():
     pages = {
         "Overview": page_overview,
         "Category Breakdown": page_categories,
+        "Subcategory Breakdown": page_subcategories,
+        "Transaction Editor": page_transaction_editor,
         "Spending Trends": page_trends,
         "Savings & Spaces": page_savings,
         "Travel & FX": page_travel,

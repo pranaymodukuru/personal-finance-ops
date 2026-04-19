@@ -9,8 +9,10 @@ Steps:
 1. Run `python -m src.pipeline` to see what has already been processed.
 2. Run `python -c "from src.pipeline import pending; [print(p) for p in pending()]"` to list unprocessed PDFs in statements/.
 3. If there are no pending PDFs, tell the user everything is already up to date and stop.
-4. For each pending PDF, spawn a **separate Agent** (using the Agent tool) to process it. Do NOT process documents yourself — delegate every document to its own agent to keep context isolated. Pass the full extraction prompt below as the agent's `prompt`, with the specific PDF path substituted in.
-5. Wait for all agents to complete, then print a summary table: filename, bank, transaction count, and output path for each.
+4. Take only the **first 3** pending PDFs from the list. If there are more than 3 pending, note how many are remaining after this batch.
+5. For each of the (up to 3) selected PDFs, spawn a **separate Agent** (using the Agent tool) to process it. Do NOT process documents yourself — delegate every document to its own agent to keep context isolated. Pass the full extraction prompt below as the agent's `prompt`, with the specific PDF path substituted in.
+6. Wait for all agents to complete, then print a summary table: filename, bank, transaction count, and output path for each.
+7. If there are remaining unprocessed PDFs beyond this batch, tell the user how many are left and **ask if they want to process the next batch** before proceeding. Do NOT continue automatically.
 
 ## Per-document agent prompt template
 
