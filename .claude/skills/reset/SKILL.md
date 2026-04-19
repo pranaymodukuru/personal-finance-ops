@@ -14,14 +14,16 @@ Steps:
 3. Once confirmed, run the following commands:
    ```bash
    rm -f statements/*.pdf
-   rm -f output/cumulative.csv
-   rm -rf output/individual/*
-   touch output/individual/.gitkeep
+   rm -f output/raw/cumulative.csv
+   rm -rf output/raw/individual/*
+   touch output/raw/individual/.gitkeep
+   rm -f output/processed/cleaned_cumulative.csv
    rm -f pipeline.json
    ```
 4. Confirm what was deleted:
    - How many PDFs were removed from `statements/`
-   - Whether `output/cumulative.csv` existed and was removed
-   - Whether `output/individual/` was cleared
+   - Whether `output/raw/cumulative.csv` existed and was removed
+   - Whether `output/raw/individual/` was cleared
+   - Whether `output/processed/cleaned_cumulative.csv` existed and was removed
    - Whether `pipeline.json` was removed
 5. Tell the user the app is now in a clean state and they can drop new PDFs into `statements/` and run `/process-statements` to start fresh.

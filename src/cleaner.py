@@ -4,8 +4,8 @@ Data cleaning pipeline for personal finance transactions.
 Usage:
     python -m src.cleaner [--input PATH] [--output PATH] [--report-only]
 
-Reads  output/cumulative.csv  (or --input)
-Writes output/cleaned_cumulative.csv (or --output)
+Reads  output/raw/cumulative.csv  (or --input)
+Writes output/processed/cleaned_cumulative.csv (or --output)
 Prints a JSON cleaning report to stdout on the last line.
 """
 
@@ -22,8 +22,8 @@ import pandas as pd
 
 from src.subcategory import assign_subcategory
 
-RAW_CSV = Path("output/cumulative.csv")
-CLEANED_CSV = Path("output/cleaned_cumulative.csv")
+RAW_CSV = Path("output/raw/cumulative.csv")
+CLEANED_CSV = Path("output/processed/cleaned_cumulative.csv")
 
 IDENTITY_COLS = ["date", "transaction_date", "receiver", "amount", "type", "bank", "account_type"]
 

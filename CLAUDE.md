@@ -11,9 +11,11 @@ pf-ops/
 │   ├── Amex/
 │   └── Advanzia/
 ├── output/
-│   ├── individual/          # Per-statement CSV + JSON files
-│   ├── cumulative.csv       # All transactions combined across all statements (raw)
-│   └── cleaned_cumulative.csv  # Cleaned + enriched data with subcategories (dashboard reads this)
+│   ├── raw/
+│   │   ├── individual/      # Per-statement CSV + JSON files
+│   │   └── cumulative.csv   # All transactions combined across all statements (raw)
+│   └── processed/
+│       └── cleaned_cumulative.csv  # Cleaned + enriched data with subcategories (dashboard reads this)
 ├── src/
 │   ├── extractor.py         # PDF → raw text (pdfplumber); fallback for complex layouts
 │   ├── pipeline.py          # Pipeline state tracker (reads/writes pipeline.json)
@@ -46,14 +48,14 @@ No API key required. Claude Code reads PDFs directly and extracts transactions i
 | `/process-statements` | Find all unprocessed PDFs in `statements/` and extract their transactions |
 | `/pipeline-status` | Show which files have been processed, transaction counts, and what's pending |
 | `/reprocess [file]` | Force re-extract a specific statement even if already processed |
-| `/clean-data` | Clean and normalize `cumulative.csv` → `cleaned_cumulative.csv`; dedup, validate, assign subcategories |
+| `/clean-data` | Clean and normalize `output/raw/cumulative.csv` → `output/processed/cleaned_cumulative.csv`; dedup, validate, assign subcategories |
 
 ### Recommended workflow
 
 ```
-/process-statements   →  output/cumulative.csv  (raw, 16 cols)
-/clean-data           →  output/cleaned_cumulative.csv  (18 cols: +is_internal_transfer, +subcategory)
-/start-dashboard      →  reads cleaned_cumulative.csv
+/process-statements   →  output/raw/cumulative.csv  (raw, 16 cols)
+/clean-data           →  output/processed/cleaned_cumulative.csv  (18 cols: +is_internal_transfer, +subcategory)
+/start-dashboard      →  reads output/processed/cleaned_cumulative.csv
 ```
 
 ## Pipeline Tracking

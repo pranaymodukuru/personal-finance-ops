@@ -1,12 +1,12 @@
 ---
 name: clean-data
-description: Clean raw transaction data — dedup, normalize, validate, flag internal transfers, assign subcategories — and produce output/cleaned_cumulative.csv for the dashboard
+description: Clean raw transaction data — dedup, normalize, validate, flag internal transfers, assign subcategories — and produce output/processed/cleaned_cumulative.csv for the dashboard
 ---
 
-Clean `output/cumulative.csv` and produce `output/cleaned_cumulative.csv`, ready for the dashboard.
+Clean `output/raw/cumulative.csv` and produce `output/processed/cleaned_cumulative.csv`, ready for the dashboard.
 
-> **CRITICAL: `output/cumulative.csv` is the raw source of truth and MUST NEVER be modified.**
-> All fixes, patches, and corrections go into `output/cleaned_cumulative.csv` only.
+> **CRITICAL: `output/raw/cumulative.csv` is the raw source of truth and MUST NEVER be modified.**
+> All fixes, patches, and corrections go into `output/processed/cleaned_cumulative.csv` only.
 > If any step instructs you to write to `cumulative.csv`, do NOT do it — skip that write or apply the fix only in memory before writing the cleaned output.
 
 The cleaning script (`src/cleaner.py`) handles deduplication, text normalization, type coercion, validation, internal transfer flagging, and subcategory assignment. It always prints a JSON report as its last stdout line. The skill parses that JSON to drive the interactive workflow below.
@@ -16,18 +16,18 @@ The cleaning script (`src/cleaner.py`) handles deduplication, text normalization
 ### 1. Pre-flight check
 Run:
 ```bash
-python3 -c "from pathlib import Path; p=Path('output/cumulative.csv'); print('exists' if p.exists() else 'missing')"
+python3 -c "from pathlib import Path; p=Path('output/raw/cumulative.csv'); print('exists' if p.exists() else 'missing')"
 ```
 If the output is `missing`, tell the user to run `/process-statements` first and stop.
 
 ### 2. Overwrite guard
-Check if `output/cleaned_cumulative.csv` exists:
+Check if `output/processed/cleaned_cumulative.csv` exists:
 ```bash
-python3 -c "from pathlib import Path; print('exists' if Path('output/cleaned_cumulative.csv').exists() else 'missing')"
+python3 -c "from pathlib import Path; print('exists' if Path('output/processed/cleaned_cumulative.csv').exists() else 'missing')"
 ```
 If `exists`, automatically back it up — no confirmation needed:
 ```bash
-cp output/cleaned_cumulative.csv output/cleaned_cumulative.backup.csv
+cp output/processed/cleaned_cumulative.csv output/cleaned_cumulative.backup.csv
 ```
 Inform the user: "Backed up existing `cleaned_cumulative.csv` → `cleaned_cumulative.backup.csv`"
 
@@ -106,10 +106,10 @@ Display the results:
 | Subcategories assigned | `subcategory.unique` unique labels |
 | Unclassified | `subcategory.unclassified` |
 | Anomalies | `anomalies.total_anomalies` |
-| Output | `output/cleaned_cumulative.csv` |
+| Output | `output/processed/cleaned_cumulative.csv` |
 
 Then tell the user:
-> "The dashboard reads `output/cleaned_cumulative.csv` automatically. Run `/start-dashboard` to view results with full subcategory breakdowns."
+> "The dashboard reads `output/processed/cleaned_cumulative.csv` automatically. Run `/start-dashboard` to view results with full subcategory breakdowns."
 
 If `subcategory.unclassified > 0`, add:
 > "`{unclassified}` transactions have subcategory `unclassified`. Inspect them in the Transaction Editor, or add regex patterns to `src/subcategory.py` and re-run `/clean-data`."

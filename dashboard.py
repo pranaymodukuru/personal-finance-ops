@@ -42,8 +42,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ── Constants ─────────────────────────────────────────────────────────────────
-# CUMULATIVE_CSV = Path("output/cumulative.csv")
-CUMULATIVE_CSV = Path("output/cleaned_cumulative.csv")
+# CUMULATIVE_CSV = Path("output/raw/cumulative.csv")
+CUMULATIVE_CSV = Path("output/processed/cleaned_cumulative.csv")
 
 
 CATEGORY_COLORS = {

@@ -5,11 +5,12 @@ statements/*.pdf
 statements/**/*.pdf
 
 # Extracted transaction data
-output/individual/*
-!output/individual/.gitkeep
-output/cumulative.csv
-output/*.csv
-output/*.json
+output/raw/individual/*
+!output/raw/individual/.gitkeep
+output/raw/cumulative.csv
+output/raw/*.csv
+output/raw/*.json
+output/processed/*.csv
 
 # Pipeline state — contains file hashes tied to your personal statements
 pipeline.json

@@ -15,9 +15,9 @@ Schema of pipeline.json:
       "processed_at": "2024-04-09T10:30:00+00:00",  # null if pending
       "transaction_count": 42,                        # null if pending
       "output": {                                     # null if pending
-        "csv": "output/individual/N26_2024-01.csv",
-        "json": "output/individual/N26_2024-01.json",
-        "cumulative": "output/cumulative.csv"
+        "csv": "output/raw/individual/N26_2024-01.csv",
+        "json": "output/raw/individual/N26_2024-01.json",
+        "cumulative": "output/raw/cumulative.csv"
       }
     }
   }
@@ -95,7 +95,7 @@ def record(pdf_path: Path, transaction_count: int, csv_path: Path, json_path: Pa
         "output": {
             "csv": str(csv_path),
             "json": str(json_path),
-            "cumulative": "output/cumulative.csv",
+            "cumulative": "output/raw/cumulative.csv",
         },
     }
     _save(state)

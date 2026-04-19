@@ -18,8 +18,8 @@ from pathlib import Path
 
 from src.pipeline import record
 
-INDIVIDUAL_DIR = Path("output/individual")
-CUMULATIVE_CSV = Path("output/cumulative.csv")
+INDIVIDUAL_DIR = Path("output/raw/individual")
+CUMULATIVE_CSV = Path("output/raw/cumulative.csv")
 
 FIELDNAMES = [
     "date",
@@ -42,7 +42,7 @@ FIELDNAMES = [
 
 
 def save(pdf_path: Path, transactions: list[dict]) -> tuple[Path, Path]:
-    """Write transactions to output/individual/<stem>.csv + .json, append to cumulative.csv."""
+    """Write transactions to output/raw/individual/<stem>.csv + .json, append to cumulative.csv."""
     INDIVIDUAL_DIR.mkdir(parents=True, exist_ok=True)
 
     stem = pdf_path.stem
